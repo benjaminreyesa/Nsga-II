@@ -40,7 +40,7 @@ struct RNG {
 // ------------------------------ Individuo ------------------------------
 struct Individuo {
     std::vector<int> crom;
-    double f1 = 0, f2 = 0, viol = 0, f1p = 0, f2p = 0;
+    double f1 = 0, f2 = 0, viol = 0;
     bool factible = false;
     int rank = 0;
     double cd = 0.0;

@@ -4,7 +4,6 @@
 #include <cmath>
 #include <limits>
 
-static const double BIG_M = 1.0e6;
 static const double INF = std::numeric_limits<double>::infinity();
 
 // =========================== REPRESENTACION ===========================
@@ -141,8 +140,6 @@ void evalua(Individuo& ind, const Instancia& inst) {
 
     ind.f1 = f1; ind.f2 = f2; ind.viol = viol;
     ind.factible = (viol <= 1e-9);
-    ind.f1p = f1 + BIG_M * viol;
-    ind.f2p = f2 + BIG_M * viol;
 }
 
 // ============================ INICIALIZACION =========================
@@ -417,9 +414,13 @@ std::vector<int> mutacion(const std::vector<int>& crom, const Instancia& inst, R
 
 // ============================ NUCLEO NSGA-II =========================
 static bool domina_ind(const Individuo& a, const Individuo& b) {
+    // Dominancia restringida (Deb et al., 2002): la factibilidad manda.
+    if (a.factible != b.factible) return a.factible;     // factible domina a infactible
+    if (!a.factible) return a.viol < b.viol - 1e-12;     // ambos infactibles: menor violacion
+    // ambos factibles: dominancia de Pareto sobre los objetivos originales
     bool mejor = false;
-    if (a.f1p > b.f1p || a.f2p > b.f2p) return false;
-    if (a.f1p < b.f1p || a.f2p < b.f2p) mejor = true;
+    if (a.f1 > b.f1 || a.f2 > b.f2) return false;
+    if (a.f1 < b.f1 || a.f2 < b.f2) mejor = true;
     return mejor;
 }
 
@@ -457,31 +458,80 @@ static void crowding(std::vector<Individuo>& pop, const std::vector<int>& fr) {
     for (int m = 0; m < 2; ++m) {
         std::vector<int> ord = fr;
         std::sort(ord.begin(), ord.end(), [&](int a, int b){
-            return (m == 0 ? pop[a].f1p < pop[b].f1p : pop[a].f2p < pop[b].f2p);
+            return (m == 0 ? pop[a].f1 < pop[b].f1 : pop[a].f2 < pop[b].f2);
         });
         pop[ord.front()].cd = INF;
         pop[ord.back()].cd = INF;
-        double fmin = (m == 0 ? pop[ord.front()].f1p : pop[ord.front()].f2p);
-        double fmax = (m == 0 ? pop[ord.back()].f1p : pop[ord.back()].f2p);
+        double fmin = (m == 0 ? pop[ord.front()].f1 : pop[ord.front()].f2);
+        double fmax = (m == 0 ? pop[ord.back()].f1 : pop[ord.back()].f2);
         if (fmax - fmin < 1e-12) continue;
         for (int k = 1; k < l - 1; ++k) {
-            double prev = (m == 0 ? pop[ord[k - 1]].f1p : pop[ord[k - 1]].f2p);
-            double next = (m == 0 ? pop[ord[k + 1]].f1p : pop[ord[k + 1]].f2p);
+            double prev = (m == 0 ? pop[ord[k - 1]].f1 : pop[ord[k - 1]].f2);
+            double next = (m == 0 ? pop[ord[k + 1]].f1 : pop[ord[k + 1]].f2);
             pop[ord[k]].cd += (next - prev) / (fmax - fmin);
         }
     }
+    // como en crowddist.c de Deb: la distancia se promedia sobre los objetivos
+    for (int idx : fr) if (pop[idx].cd != INF) pop[idx].cd /= 2.0;
 }
 
-static const Individuo& torneo(const std::vector<Individuo>& P, RNG& rng) {
-    auto pr = rng.sample2((int)P.size());
-    const Individuo& a = P[pr.first];
-    const Individuo& b = P[pr.second];
-    if (a.rank != b.rank) return a.rank < b.rank ? a : b;
-    return a.cd > b.cd ? a : b;
+// Torneo binario tal como tourselect.c de Deb: dominancia restringida directa,
+// luego distancia de aglomeracion y, en empate, azar.
+static const Individuo& torneo(const Individuo& a, const Individuo& b, RNG& rng) {
+    if (domina_ind(a, b)) return a;
+    if (domina_ind(b, a)) return b;
+    if (a.cd > b.cd) return a;
+    if (b.cd > a.cd) return b;
+    return rng.rand01() <= 0.5 ? a : b;
+}
+
+// Descendencia de un par de padres: con probabilidad pcross se cruzan (dos
+// hijos, uno por cada orden de los padres); si no, se copian. Cada hijo muta
+// con probabilidad pmut.
+static void descendencia(const Individuo& p1, const Individuo& p2,
+                         const Instancia& inst, RNG& rng, double pcross, double pmut,
+                         std::vector<Individuo>& Q) {
+    std::vector<int> h1, h2;
+    if (rng.rand01() <= pcross) {
+        h1 = cruzamiento(p1.crom, p2.crom, inst, rng);
+        h2 = cruzamiento(p2.crom, p1.crom, inst, rng);
+    } else {
+        h1 = p1.crom;
+        h2 = p2.crom;
+    }
+    if (rng.rand01() <= pmut) h1 = mutacion(h1, inst, rng);
+    if (rng.rand01() <= pmut) h2 = mutacion(h2, inst, rng);
+    Individuo a; a.crom = h1; evalua(a, inst); Q.push_back(a);
+    Individuo b; b.crom = h2; evalua(b, inst); Q.push_back(b);
+}
+
+// Seleccion tal como selection() de Deb: dos permutaciones de la poblacion,
+// cada individuo participa en exactamente dos torneos y cada grupo de cuatro
+// produce cuatro hijos.
+static std::vector<Individuo> seleccion(const std::vector<Individuo>& P,
+                                        const Instancia& inst, RNG& rng,
+                                        double pcross, double pmut) {
+    int n = (int)P.size();
+    std::vector<int> a1(n), a2(n);
+    for (int i = 0; i < n; ++i) a1[i] = a2[i] = i;
+    rng.shuffle(a1);
+    rng.shuffle(a2);
+    std::vector<Individuo> Q;
+    for (int i = 0; i + 3 < n; i += 4) {
+        const Individuo& p1 = torneo(P[a1[i]], P[a1[i + 1]], rng);
+        const Individuo& p2 = torneo(P[a1[i + 2]], P[a1[i + 3]], rng);
+        descendencia(p1, p2, inst, rng, pcross, pmut, Q);
+        const Individuo& p3 = torneo(P[a2[i]], P[a2[i + 1]], rng);
+        const Individuo& p4 = torneo(P[a2[i + 2]], P[a2[i + 3]], rng);
+        descendencia(p3, p4, inst, rng, pcross, pmut, Q);
+    }
+    return Q;
 }
 
 std::vector<Individuo> nsga2(const Instancia& inst, RNG& rng,
                              int popsize, int ngen, double pcross, double pmut) {
+    // como en Deb, la poblacion debe ser multiplo de 4 (grupos de dos torneos)
+    popsize -= popsize % 4;
     std::vector<Individuo> P;
     for (auto& c : inicializa_poblacion(inst, popsize, rng)) {
         Individuo ind; ind.crom = c; evalua(ind, inst); P.push_back(ind);
@@ -489,17 +539,8 @@ std::vector<Individuo> nsga2(const Instancia& inst, RNG& rng,
     auto fr = fast_nds(P);
     for (auto& f : fr) crowding(P, f);
 
-    for (int gen = 0; gen < ngen; ++gen) {
-        std::vector<Individuo> Q;
-        while ((int)Q.size() < popsize) {
-            const Individuo& p1 = torneo(P, rng);
-            const Individuo& p2 = torneo(P, rng);
-            std::vector<int> hijo;
-            if (rng.rand01() < pcross) hijo = cruzamiento(p1.crom, p2.crom, inst, rng);
-            else hijo = p1.crom;
-            if (rng.rand01() < pmut) hijo = mutacion(hijo, inst, rng);
-            Individuo ind; ind.crom = hijo; evalua(ind, inst); Q.push_back(ind);
-        }
+    for (int gen = 1; gen < ngen; ++gen) {
+        std::vector<Individuo> Q = seleccion(P, inst, rng, pcross, pmut);
         std::vector<Individuo> Rp = P;
         Rp.insert(Rp.end(), Q.begin(), Q.end());
         auto frentes = fast_nds(Rp);
@@ -520,11 +561,11 @@ std::vector<Individuo> nsga2(const Instancia& inst, RNG& rng,
                 nueva.push_back(idx);
             }
         }
+        // rango y distancia de aglomeracion se conservan tal como quedaron en el
+        // ordenamiento de la poblacion mezclada (fillnds.c de Deb)
         std::vector<Individuo> nuevaP;
         for (int idx : nueva) nuevaP.push_back(Rp[idx]);
         P = nuevaP;
-        auto fr2 = fast_nds(P);
-        for (auto& f : fr2) crowding(P, f);
     }
     return P;
 }

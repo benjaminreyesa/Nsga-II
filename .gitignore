@@ -6,3 +6,7 @@ nsga2
 # python
 __pycache__/
 *.pyc
+
+# resultados generados por el programa (se regeneran con ./nsga2 y graficar.py)
+resultados/*
+!resultados/graficar.py
