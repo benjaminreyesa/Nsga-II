@@ -10,3 +10,4 @@ __pycache__/
 # resultados generados por el programa (se regeneran con ./nsga2 y graficar.py)
 resultados/*
 !resultados/graficar.py
+resultados_servidor/

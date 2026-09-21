@@ -74,6 +74,7 @@ std::vector<Individuo> nsga2(const Instancia& inst, RNG& rng,
                              int popsize, int ngen,
                              double pcross, double pmut);
 std::vector<std::pair<double,double>> frente_factible(const std::vector<Individuo>& pop);
+double violacion_minima(const std::vector<Individuo>& pop);
 
 // ------------------------------ Indicadores ----------------------------
 typedef std::pair<double,double> Punto;

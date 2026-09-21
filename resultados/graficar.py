@@ -26,26 +26,35 @@ for c in ["A", "B", "C"]:
     agg = sorted(load("frente_%s_agregado.csv" % c))
     union = [p for f in glob.glob("frente_%s_semilla*.csv" % c) for p in load(f)]
     sv = sorted(solver[c])
-    for fmt, size, dpi in (("png", (7, 5), 130), ("pdf", (3.4, 2.5), 300)):
-        small = fmt == "pdf"
+    # png: vista rapida; pdf: figura de una columna; pdf_panel: un tercio del ancho de pagina
+    for fmt, size, dpi in (("png", (7, 5), 130), ("pdf", (3.4, 2.5), 300), ("pdf_panel", (2.35, 1.95), 300)):
+        small = fmt != "png"
+        panel = fmt == "pdf_panel"
         fig, ax = plt.subplots(figsize=size, dpi=dpi)
         if union:
             ax.scatter([p[0] / 1000 for p in union], [p[1] for p in union], s=6 if small else 12,
                        color="0.72", label="Soluciones por semilla", zorder=1)
         ax.plot([p[0] / 1000 for p in agg], [p[1] for p in agg], "o--", color=NSGA,
                 ms=3.5 if small else 6, lw=0.9, label="NSGA-II (agregado)", zorder=3)
-        ax.plot([p[0] / 1000 for p in sv], [p[1] for p in sv], "s-", color=AMPL,
-                ms=4 if small else 8, lw=0.9, label="Solver (AMPL/Gurobi)", zorder=4)
-        fs = 8 if small else 10
+        # cuadrado hueco: si un punto de NSGA-II coincide con el solver queda visible dentro
+        ax.plot([p[0] / 1000 for p in sv], [p[1] for p in sv], "s-", color=AMPL, mfc="none",
+                mew=1.2 if small else 2.0, ms=6 if small else 12, lw=0.9,
+                label="Solver (AMPL/Gurobi)", zorder=4)
+        fs = 7 if panel else (8 if small else 10)
+        # sin notacion con desplazamiento en los ejes; en el Caso A todos los
+        # puntos coinciden y matplotlib auto-escalaria a un rango de milesimas
+        ax.ticklabel_format(useOffset=False, style="plain")
+        if c == "A":
+            ax.set_xlim(40, 175); ax.set_ylim(140, 185)
         ax.set_xlabel(r"$f_1$ (costo total, $\times 10^{3}$)", fontsize=fs)
         ax.set_ylabel(r"$f_2 = \Delta$", fontsize=fs)
-        ax.tick_params(labelsize=7 if small else 9)
+        ax.tick_params(labelsize=6 if panel else (7 if small else 9))
         if not small:
             ax.set_title("Caso %s (%s): solver vs NSGA-II" % (c, DESC[c]))
         ax.grid(True, color="#dddddd", lw=0.6); ax.set_axisbelow(True)
         for s in ("top", "right"): ax.spines[s].set_visible(False)
-        ax.legend(fontsize=6.5 if small else 9, frameon=False)
+        ax.legend(fontsize=5.5 if panel else (6.5 if small else 9), frameon=False)
         fig.tight_layout(pad=0.3)
-        fig.savefig("comparacion_Caso%s.%s" % (c, fmt))
+        fig.savefig("comparacion_Caso%s%s.%s" % (c, "_panel" if panel else "", "pdf" if panel else fmt))
         plt.close(fig)
     print("comparacion_Caso%s.{png,pdf}  (agregado=%d, nube=%d)" % (c, len(agg), len(union)))

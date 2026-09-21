@@ -576,6 +576,13 @@ std::vector<std::pair<double,double>> frente_factible(const std::vector<Individu
     return pts;
 }
 
+// menor violacion de restricciones en la poblacion final (0 si hay factibles)
+double violacion_minima(const std::vector<Individuo>& pop) {
+    double v = INF;
+    for (auto& ind : pop) v = std::min(v, ind.viol);
+    return v;
+}
+
 // ============================= INDICADORES ===========================
 static bool domina_pt(const Punto& a, const Punto& b) {
     return (a.first <= b.first && a.second <= b.second) &&

@@ -4,6 +4,8 @@
 // hypervolume y two-set coverage. Genera CSVs en resultados/.
 //
 // Uso:  ./nsga2 [--rapido] [--casos A,B,C] [--pop 100] [--gen 250] [--semillas 10]
+//       ./nsga2 --instancias ruta1.dat,ruta2.dat ...   (casos externos; el nombre
+//                del archivo identifica el caso y no se compara con el solver)
 
 #include "nsga2.hpp"
 #include <iostream>
@@ -44,7 +46,25 @@ int main(int argc, char** argv) {
         {"C", "data/Instance_p30_d3_d1_p0.204_s762_3camiones.dat"},
     };
     std::vector<Caso> casos;
-    for (auto& c : todos) if (sel.find(c.nombre) != std::string::npos) casos.push_back(c);
+    std::string externas = arg_valor(argc, argv, "--instancias", "");
+    if (!externas.empty()) {
+        // lista de rutas separadas por coma; el caso toma el nombre del archivo sin extension
+        size_t ini = 0;
+        while (ini <= externas.size()) {
+            size_t fin = externas.find(',', ini);
+            if (fin == std::string::npos) fin = externas.size();
+            std::string ruta = externas.substr(ini, fin - ini);
+            if (!ruta.empty()) {
+                std::string nombre = ruta.substr(ruta.find_last_of("/\\") + 1);
+                if (nombre.size() > 4 && nombre.substr(nombre.size() - 4) == ".dat")
+                    nombre = nombre.substr(0, nombre.size() - 4);
+                casos.push_back({nombre, ruta});
+            }
+            ini = fin + 1;
+        }
+    } else {
+        for (auto& c : todos) if (sel.find(c.nombre) != std::string::npos) casos.push_back(c);
+    }
 
     // frentes exactos de referencia (casoPmulti, 11 ponderadores, AMPL/Gurobi)
     std::map<std::string,std::vector<Punto>> solver = {
@@ -56,7 +76,7 @@ int main(int argc, char** argv) {
     std::ofstream resumen("resultados/resumen_indicadores.csv");
     resumen << "caso,n_semillas,popsize,ngen,pts_agregado,hv_solver,hv_nsga,C_solver_nsga,C_nsga_solver,tiempo_s\n";
     std::ofstream por_semilla("resultados/resumen_semillas.csv");
-    por_semilla << "caso,semilla,pts_frente,mejor_costo,mejor_desbalance,tiempo_s\n";
+    por_semilla << "caso,semilla,pts_frente,mejor_costo,mejor_desbalance,violacion_min,tiempo_s\n";
     por_semilla << std::fixed;
 
     std::cout << std::fixed << std::setprecision(2);
@@ -79,19 +99,31 @@ int main(int argc, char** argv) {
             frentes_sem.push_back(fr);
             guarda_frente("resultados/frente_" + caso.nombre + "_semilla" +
                           (s < 10 ? "0" : "") + std::to_string(s) + ".csv", fr);
-            double mc = 1e18, mb = 1e18;
+            double mc = 1e18, mb = 1e18, vmin = violacion_minima(P);
             for (auto& p : fr) { mc = std::min(mc, p.first); mb = std::min(mb, p.second); }
             std::cout << "  semilla " << std::setw(2) << s << " -> " << std::setw(2)
-                      << fr.size() << " puntos, mejor costo=" << mc
-                      << ", mejor balance=" << mb << ", " << dts << " s\n";
+                      << fr.size() << " puntos";
+            if (fr.empty()) std::cout << " (sin factibles; violacion minima=" << vmin << ")";
+            else std::cout << ", mejor costo=" << mc << ", mejor balance=" << mb;
+            std::cout << ", " << dts << " s\n";
             por_semilla << caso.nombre << "," << s << "," << fr.size() << ","
-                        << std::setprecision(2) << mc << "," << mb << "," << dts << "\n";
+                        << std::setprecision(2) << (fr.empty() ? 0.0 : mc) << ","
+                        << (fr.empty() ? 0.0 : mb) << "," << vmin << "," << dts << "\n";
         }
         auto t1 = std::chrono::steady_clock::now();
         double dt = std::chrono::duration<double>(t1 - t0).count();
 
         auto agregado = frente_agregado(frentes_sem);
         guarda_frente("resultados/frente_" + caso.nombre + "_agregado.csv", agregado);
+
+        // sin frente exacto de referencia (instancias externas) no hay comparacion
+        if (!solver.count(caso.nombre) || agregado.empty()) {
+            std::cout << "  frente agregado: " << agregado.size() << " puntos; tiempo total caso="
+                      << dt << "s" << (agregado.empty() ? "  (instancia sin soluciones factibles)" : "") << "\n";
+            resumen << caso.nombre << "," << n_sem << "," << popsize << "," << ngen << ","
+                    << agregado.size() << ",,,,," << std::setprecision(2) << dt << "\n";
+            continue;
+        }
 
         Punto lo, hi;
         rango_comun(solver[caso.nombre], agregado, lo, hi);

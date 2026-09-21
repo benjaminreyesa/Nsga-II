@@ -95,6 +95,19 @@ bool Instancia::cargar(const std::string& ruta) {
     Q        = triples(bloque_asignacion(t, "param Q"));
     q        = triples(bloque_asignacion(t, "param q"));
 
+    // parametros escalares de turno; si el .dat no los trae quedan los defaults
+    {
+        auto escalar = [&](const std::string& nombre, double& dest) {
+            std::string b = bloque_asignacion(t, "param " + nombre);
+            auto tk = tokens(b);
+            if (!tk.empty()) dest = std::stod(tk[0]);
+        };
+        escalar("Tmax", Tmax);
+        escalar("gamma", gamma);
+        escalar("eta", eta);
+        escalar("beta", beta);
+    }
+
     // matriz D: "param D :  col col ... :=  fila v v ... ;"
     {
         size_t p = t.find("param D");
@@ -146,6 +159,7 @@ std::string Instancia::resumen() const {
        << " depositos, |K|=" << K.size() << " camiones, |R|=" << R.size()
        << " residuos\n  vehicle_map=";
     for (auto& vm : vehicle_map) ss << "(" << vm.first << "," << vm.second << ") ";
-    ss << "\n  demanda total=" << (long)(tot + 0.5);
+    ss << "\n  demanda total=" << (long)(tot + 0.5)
+       << "  Tmax=" << Tmax << " gamma=" << gamma << " eta=" << eta;
     return ss.str();
 }
