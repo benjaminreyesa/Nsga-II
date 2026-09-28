@@ -21,6 +21,17 @@ cd resultados && python graficar.py                     # figuras comparacion_Ca
 ```
 Se ejecuta desde esta carpeta (las instancias se leen de `data/`).
 
+Instancias externas (una o varias, separadas por coma):
+```bash
+./nsga2 --instancias ruta/Instance_p30_d3_d7_p0.10_h0.2_s129.dat --semillas 10
+```
+Cola sobre todas las `.dat` de una carpeta, de menor a mayor tamaño; cada
+instancia deja sus CSV en `resultados_cola/<instancia>/` y su log al lado:
+```bash
+nohup ./correr_cola.sh ~/experimentos/Instancias > cola.log 2>&1 &
+tail -f cola.log
+```
+
 ## Parámetros
 popsize=100 (múltiplo de 4), generaciones=250, prob. cruzamiento=0.9,
 prob. mutación=0.3 (por hijo), torneo binario, semillas 1..10.
