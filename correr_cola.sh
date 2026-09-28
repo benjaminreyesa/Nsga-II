@@ -5,14 +5,15 @@
 # Si una instancia ya tiene su frente agregado se salta, asi la cola se puede relanzar.
 #
 # Uso (desde la carpeta del repo, con ./nsga2 compilado):
-#   ./correr_cola.sh <carpeta_con_.dat> [semillas] [pop] [gen]
+#   ./correr_cola.sh <carpeta_con_.dat> [semillas] [pop] [gen] [carpeta_salida]
 #   nohup ./correr_cola.sh ~/experimentos/Instancias > cola.log 2>&1 &
+#   nohup ./correr_cola.sh ~/experimentos/Instancias 10 200 1000 resultados_cola_200x1000 > cola_200x1000.log 2>&1 &
 
 DIR=${1:?falta la carpeta con las instancias .dat}
 SEM=${2:-10}
 POP=${3:-100}
 GEN=${4:-250}
-OUT=resultados_cola
+OUT=${5:-resultados_cola}
 
 BIN=./nsga2
 [ -x "$BIN" ] || BIN=./nsga2.exe

@@ -13,3 +13,6 @@ resultados/*
 resultados_servidor/
 resultados_cola/
 cola.log
+resultados_presupuesto/
+resultados_cola_*/
+cola_*.log
