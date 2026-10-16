@@ -118,7 +118,8 @@ void evalua(Individuo& ind, const Instancia& inst) {
         for (int i : ruta) carga_ruta += inst.carga_punto.at(i);
         L[dep] += carga_ruta;
 
-        // capacidad por compartimento
+        // capacidad por compartimento: el exceso se mide como fraccion de la
+        // capacidad, para poder sumarlo con el exceso de turno (unidades distintas)
         for (int r : inst.R) {
             double carga_r = 0.0;
             for (int i : ruta) {
@@ -127,11 +128,11 @@ void evalua(Individuo& ind, const Instancia& inst) {
             }
             double cap = inst.Q.count({r, k}) ? inst.Q.at({r, k}) : 0.0;
             double sobra = (1.0 + inst.beta) * carga_r - cap;
-            if (sobra > 0) viol += sobra;
+            if (sobra > 0) viol += sobra / (cap > 0 ? cap : 1.0);
         }
-        // turno
+        // turno: exceso como fraccion de la duracion maxima
         double tiempo = inst.gamma * dist + inst.eta * carga_ruta;
-        if (tiempo - inst.Tmax > 0) viol += tiempo - inst.Tmax;
+        if (tiempo - inst.Tmax > 0) viol += (tiempo - inst.Tmax) / (inst.Tmax > 0 ? inst.Tmax : 1.0);
     }
 
     double lmin = INF, lmax = -INF;

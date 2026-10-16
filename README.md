@@ -40,6 +40,8 @@ prob. mutación=0.3 (por hijo), torneo binario, semillas 1..10.
 - Manejo de infactibilidad por **dominancia restringida** (`domina_ind`, como
   `check_dominance` de `dominance.c`): factible domina a infactible; entre
   infactibles gana la menor violación; entre factibles, dominancia de Pareto.
+  La violación es adimensional: exceso de cada compartimento dividido por su
+  capacidad más exceso de turno dividido por `Tmax`, sumados sobre los camiones.
   No se penalizan los objetivos.
 - Torneo binario como `tourselect.c`: dominancia restringida directa, luego
   distancia de aglomeración y, en empate, azar.
